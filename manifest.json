@@ -1,0 +1,19 @@
+{
+  "name": "MuteOne Capture",
+  "description": "Capture tab audio, save as WAV, and import into MuteOne Desktop.",
+  "version": "1.0",
+  "manifest_version": 3,
+  "permissions": [
+    "tabCapture",
+    "downloads",
+    "storage",
+    "activeTab"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "MuteOne Capture"
+  },
+  "background": {
+    "service_worker": "polyfill.js"
+  }
+}

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MuteOne Capture</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="dark">
+  <div id="app">
+    <h1>MuteOne Capture</h1>
+    <button id="captureBtn">🎙 Start Capture</button>
+    <button id="stopBtn" disabled>■ Stop & Save</button>
+
+    <!-- Mute toggle -->
+    <div class="mute-toggle">
+      <label>
+        <input type="checkbox" id="muteToggle" />
+        Mute tab while recording
+      </label>
+    </div>
+
+    <!-- Theme toggle -->
+    <div class="theme-toggle">
+      <label>
+        <input type="checkbox" id="themeToggle" />
+        Light Mode
+      </label>
+    </div>
+
+    <p id="status">Idle</p>
+  </div>
+  <script src="polyfill.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
