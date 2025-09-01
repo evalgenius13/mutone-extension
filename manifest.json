@@ -10,7 +10,7 @@
     "activeTab"
   ],
   "host_permissions": [
-    "https://muteone.app/*"
+    "https://muteone.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
