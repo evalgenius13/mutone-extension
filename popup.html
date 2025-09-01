@@ -8,10 +8,12 @@
 <body class="dark">
   <div id="app">
     <h1>MuteOne Capture</h1>
-    <button id="captureBtn">🎙 Start Capture</button>
-    <button id="stopBtn" disabled>■ Stop & Save</button>
 
-    <!-- Mute toggle -->
+    <!-- Controls -->
+    <button id="captureBtn">🎙 Start Capture</button>
+    <button id="stopBtn" disabled>■ Stop</button>
+
+    <!-- Options -->
     <div class="mute-toggle">
       <label>
         <input type="checkbox" id="muteToggle" />
@@ -19,7 +21,6 @@
       </label>
     </div>
 
-    <!-- Theme toggle -->
     <div class="theme-toggle">
       <label>
         <input type="checkbox" id="themeToggle" />
@@ -27,8 +28,10 @@
       </label>
     </div>
 
+    <!-- Status -->
     <p id="status">Idle</p>
   </div>
+
   <script src="polyfill.js"></script>
   <script src="popup.js"></script>
 </body>

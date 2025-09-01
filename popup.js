@@ -1,5 +1,6 @@
 let mediaRecorder;
 let chunks = [];
+let wavBlob = null;
 
 // Elements
 const captureBtn = document.getElementById("captureBtn");
@@ -8,7 +9,9 @@ const statusEl = document.getElementById("status");
 const themeToggle = document.getElementById("themeToggle");
 const muteToggle = document.getElementById("muteToggle");
 
-// Load theme preference
+// ------------------------------
+// Theme Persistence
+// ------------------------------
 browser.storage.local.get("theme").then(({ theme }) => {
   if (theme === "light") {
     document.body.classList.remove("dark");
@@ -17,7 +20,6 @@ browser.storage.local.get("theme").then(({ theme }) => {
   }
 });
 
-// Theme toggle
 themeToggle.addEventListener("change", () => {
   if (themeToggle.checked) {
     document.body.classList.remove("dark");
@@ -30,7 +32,9 @@ themeToggle.addEventListener("change", () => {
   }
 });
 
-// Start capture
+// ------------------------------
+// Start Capture
+// ------------------------------
 captureBtn.addEventListener("click", () => {
   statusEl.textContent = "Capturing tab audio...";
   browser.tabCapture.capture({ audio: true, video: false }, (stream) => {
@@ -39,38 +43,35 @@ captureBtn.addEventListener("click", () => {
       return;
     }
 
-    // If mute toggle is OFF → play stream back to speakers
     if (!muteToggle.checked) {
       const audio = new Audio();
       audio.srcObject = stream;
-      audio.play();
+      audio.play().catch(err => console.warn("Audio playback failed:", err));
     }
 
     mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
     chunks = [];
 
     mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+
     mediaRecorder.onstop = async () => {
-      const blob = new Blob(chunks, { type: "audio/webm" });
+      try {
+        statusEl.textContent = "Processing recording...";
 
-      // Convert WebM → WAV using Web Audio API
-      const arrayBuffer = await blob.arrayBuffer();
-      const audioCtx = new AudioContext();
-      const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+        // Convert WebM → WAV
+        const blob = new Blob(chunks, { type: "audio/webm" });
+        const arrayBuffer = await blob.arrayBuffer();
+        const audioCtx = new AudioContext();
+        const decoded = await audioCtx.decodeAudioData(arrayBuffer);
 
-      // Encode WAV
-      const wavBuffer = encodeWAV(decoded);
-      const wavBlob = new Blob([wavBuffer], { type: "audio/wav" });
+        const wavBuffer = encodeWAV(decoded);
+        wavBlob = new Blob([wavBuffer], { type: "audio/wav" });
 
-      const url = URL.createObjectURL(wavBlob);
-
-      browser.downloads.download({
-        url,
-        filename: "muteone_capture.wav",
-        saveAs: true
-      });
-
-      statusEl.textContent = "Saved as muteone_capture.wav";
+        showActionButtons(decoded.duration);
+      } catch (err) {
+        console.error("Conversion error:", err);
+        statusEl.textContent = "Error processing recording.";
+      }
     };
 
     mediaRecorder.start();
@@ -79,17 +80,89 @@ captureBtn.addEventListener("click", () => {
   });
 });
 
-// Stop capture
+// ------------------------------
+// Stop Capture
+// ------------------------------
 stopBtn.addEventListener("click", () => {
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     mediaRecorder.stop();
-    statusEl.textContent = "Stopped. Processing file...";
   }
   captureBtn.disabled = false;
   stopBtn.disabled = true;
 });
 
-// WAV encoder helper
+// ------------------------------
+// Show Save / Send Buttons
+// ------------------------------
+function showActionButtons(durationSeconds) {
+  const appEl = document.getElementById("app");
+  appEl.querySelectorAll(".action-btn").forEach(el => el.remove());
+
+  statusEl.textContent = "Recording stopped. Choose an option:";
+
+  // --- Save to Computer ---
+  const saveBtn = document.createElement("button");
+  saveBtn.textContent = "💾 Save to Computer";
+  saveBtn.className = "action-btn";
+  saveBtn.addEventListener("click", () => {
+    if (!wavBlob) return;
+    const url = URL.createObjectURL(wavBlob);
+    browser.downloads.download({
+      url,
+      filename: "muteone_capture.wav",
+      saveAs: true
+    });
+    statusEl.textContent = "Saved as muteone_capture.wav";
+    console.log("Saved to computer");
+  });
+  appEl.appendChild(saveBtn);
+
+  // --- Send to MuteOne Web ---
+  const sendBtn = document.createElement("button");
+  sendBtn.textContent = "☁️ Send to MuteOne Web";
+  sendBtn.className = "action-btn";
+  sendBtn.addEventListener("click", async () => {
+    if (!wavBlob) return;
+    statusEl.textContent = "Uploading to MuteOne Web...";
+
+    try {
+      const fileSize = wavBlob.size;
+      const formData = new FormData();
+      formData.append("file", wavBlob, "muteone_capture.wav");
+      formData.append("filename", "muteone_capture.wav");
+      formData.append("fileSize", fileSize);
+      formData.append("estimatedDuration", Math.round(durationSeconds));
+
+      const resp = await fetch("https://muteone.com/api/receive", {
+        method: "POST",
+        body: formData
+      });
+
+      if (!resp.ok) {
+        const msg = `Upload failed: ${resp.status}`;
+        console.error(msg);
+        statusEl.textContent = msg;
+        return;
+      }
+
+      const { uploadId } = await resp.json();
+      if (!uploadId) throw new Error("No uploadId returned");
+
+      statusEl.textContent = "Opening MuteOne Web...";
+      browser.tabs.create({
+        url: `https://muteone.com?upload=${uploadId}`
+      });
+    } catch (err) {
+      console.error("Send to Web error:", err);
+      statusEl.textContent = "Error sending to MuteOne Web.";
+    }
+  });
+  appEl.appendChild(sendBtn);
+}
+
+// ------------------------------
+// WAV Encoder
+// ------------------------------
 function encodeWAV(decoded) {
   const numChannels = decoded.numberOfChannels;
   const sampleRate = decoded.sampleRate;
@@ -98,12 +171,10 @@ function encodeWAV(decoded) {
   const buffer = new ArrayBuffer(44 + numFrames * numChannels * 2);
   const view = new DataView(buffer);
 
-  // RIFF header
   writeString(view, 0, "RIFF");
   view.setUint32(4, 36 + numFrames * numChannels * 2, true);
   writeString(view, 8, "WAVE");
 
-  // fmt chunk
   writeString(view, 12, "fmt ");
   view.setUint32(16, 16, true);
   view.setUint16(20, 1, true);
@@ -113,7 +184,6 @@ function encodeWAV(decoded) {
   view.setUint16(32, numChannels * 2, true);
   view.setUint16(34, 16, true);
 
-  // data chunk
   writeString(view, 36, "data");
   view.setUint32(40, numFrames * numChannels * 2, true);
 
